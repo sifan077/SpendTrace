@@ -1,0 +1,49 @@
+# Gradle / 构建产物
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+captures/
+.externalNativeBuild/
+.cxx/
+*.hprof
+
+# Kotlin / KSP
+.kotlin/
+*.class
+
+# 打包产物
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# 本机配置（含 Android SDK 路径，因机器而异，不要提交）
+local.properties
+
+# 由 `./gradlew updateDaemonJvm` 生成的 daemon JVM 配置，绑定本机 JDK
+gradle/gradle-daemon-jvm.properties
+
+# 发布签名（本机私有，绝不提交）
+keystore.properties
+*.jks
+*.keystore
+*.p12
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+# .vscode/
+
+# 日志与临时文件
+*.log
+*.swp
+*.tmp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 本地工具 / 助手工作区
+.workbuddy-ai/
+.dsh-acl-recovery/

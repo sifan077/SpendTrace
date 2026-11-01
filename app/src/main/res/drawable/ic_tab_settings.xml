@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 齿轮：外圈 + 8 个方齿 -->
+    <path
+        android:pathData="M12,12 m-5.8,0 a5.8,5.8 0 1,0 11.6,0 a5.8,5.8 0 1,0 -11.6,0"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M17.6,12 L20.6,12 M15.96,15.96 L18.08,18.08 M12,17.6 L12,20.6 M8.04,15.96 L5.92,18.08 M6.4,12 L3.4,12 M8.04,8.04 L5.92,5.92 M12,6.4 L12,3.4 M15.96,8.04 L18.08,5.92"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="3"
+        android:strokeLineCap="butt" />
+</vector>

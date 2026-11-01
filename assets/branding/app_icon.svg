@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108" role="img" aria-label="花迹 SpendTrace">
+  <title>花迹 SpendTrace</title>
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4D7857" />
+      <stop offset="1" stop-color="#6C9473" />
+    </linearGradient>
+  </defs>
+  <rect width="108" height="108" rx="24" ry="24" fill="url(#brand)" />
+  <g fill="none" stroke="#FFFFFF" stroke-width="5.8" stroke-linecap="round">
+    <path d="M31 54 L77 54" />
+    <path d="M42.5 34.08 L65.5 73.92" />
+    <path d="M42.5 73.92 L65.5 34.08" />
+  </g>
+</svg>
