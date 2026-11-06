@@ -16,15 +16,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -52,10 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalDensity
@@ -64,7 +58,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -80,9 +73,6 @@ import java.time.LocalTime
 import java.time.ZoneOffset
 
 private const val MAX_NOTE_LENGTH = 60
-
-/** 金额输入框为光标预留的宽度，避免光标贴住输入框边界被裁切。 */
-private val CURSOR_WIDTH = 2.dp
 
 /**
  * 添加 / 编辑支出的底部弹窗。
@@ -103,7 +93,6 @@ fun ExpenseEditorSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scrollState = rememberScrollState()
-    val noteFocusRequester = remember { FocusRequester() }
     val editorKey = expense?.id ?: 0L
 
     var amountText by rememberSaveable(editorKey) {
@@ -136,6 +125,24 @@ fun ExpenseEditorSheet(
                 ?: categories.first().id
             selectedCategoryId = fallback
         }
+    }
+
+    // 校验并保存；表单「保存」与内置键盘的保存键共用此逻辑
+    fun submitDraft() {
+        val amountMinor = Money.parseToMinor(amountText)
+        if (amountMinor == null) {
+            showAmountError = true
+            return
+        }
+        onSave(
+            ExpenseDraft(
+                id = expense?.id,
+                amountMinor = amountMinor,
+                categoryId = selectedCategoryId,
+                note = noteText.trim().takeIf { it.isNotEmpty() },
+                spentAt = Instant.ofEpochMilli(spentAtMillis),
+            )
+        )
     }
 
     ModalBottomSheet(
@@ -184,12 +191,7 @@ fun ExpenseEditorSheet(
 
             AmountInput(
                 value = amountText,
-                onValueChange = { input ->
-                    amountText = Money.sanitizeInput(input)
-                    if (showAmountError) showAmountError = false
-                },
                 isError = showAmountError,
-                onNext = { noteFocusRequester.requestFocus() },
             )
 
             if (showAmountError) {
@@ -242,9 +244,7 @@ fun ExpenseEditorSheet(
             TextField(
                 value = noteText,
                 onValueChange = { noteText = it.take(MAX_NOTE_LENGTH) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(noteFocusRequester),
+                modifier = Modifier.fillMaxWidth(),
                 placeholder = {
                     Text(
                         text = stringResource(R.string.note_placeholder),
@@ -267,47 +267,25 @@ fun ExpenseEditorSheet(
                 ),
             )
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(14.dp))
 
-            Button(
-                onClick = {
-                    val amountMinor = Money.parseToMinor(amountText)
-                    if (amountMinor == null) {
-                        showAmountError = true
-                        return@Button
-                    }
-                    onSave(
-                        ExpenseDraft(
-                            id = expense?.id,
-                            amountMinor = amountMinor,
-                            categoryId = selectedCategoryId,
-                            note = noteText.trim().takeIf { it.isNotEmpty() },
-                            spentAt = Instant.ofEpochMilli(spentAtMillis),
-                        )
-                    )
+            AmountKeypad(
+                isSaving = isSaving,
+                onDigit = { digit ->
+                    val next = if (digit == "." && amountText.isEmpty()) "0." else amountText + digit
+                    amountText = Money.sanitizeInput(next)
+                    if (showAmountError) showAmountError = false
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                enabled = !isSaving,
-                shape = RoundedCornerShape(14.dp),
-            ) {
-                if (isSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.save_expense),
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                    )
-                }
-            }
+                onBackspace = {
+                    amountText = amountText.dropLast(1)
+                    if (showAmountError) showAmountError = false
+                },
+                onClear = {
+                    amountText = ""
+                    if (showAmountError) showAmountError = false
+                },
+                onSave = { submitDraft() },
+            )
 
             if (expense != null) {
                 TextButton(
@@ -403,16 +381,17 @@ fun ExpenseEditorSheet(
     }
 }
 
-/** 居中的大号金额输入，`¥` 与数字作为一个整体居中。 */
+/**
+ * 居中的大号金额展示，金额由弹窗底部的内置数字键盘输入，
+ * 不再聚焦 TextField，也就不会唤起系统输入法。
+ */
 @Composable
 private fun AmountInput(
     value: String,
-    onValueChange: (String) -> Unit,
     isError: Boolean,
-    onNext: () -> Unit,
 ) {
     val color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    // 左对齐：容器宽度本就贴合文字，居中会让空态光标落到占位符正中间
+    // 左对齐：容器宽度本就贴合文字，居中会让空态占位符显得偏移
     val amountStyle = TextStyle(
         fontWeight = FontWeight.ExtraBold,
         fontSize = 39.sp,
@@ -426,8 +405,7 @@ private fun AmountInput(
         fontSize = 39.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
     )
-    // 按实际文字宽度决定输入框宽度，保证「¥」与数字始终紧贴并整体居中。
-    // 额外只留一个光标宽度的余量，避免光标贴住边界被裁切。
+    // 按实际文字宽度决定展示区宽度，保证「¥」与数字始终紧贴并整体居中。
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val fieldWidth = remember(value, amountStyle, placeholderStyle, placeholder) {
@@ -438,7 +416,7 @@ private fun AmountInput(
             style = style,
             maxLines = 1,
         )
-        with(density) { measured.size.width.toDp() } + CURSOR_WIDTH
+        with(density) { measured.size.width.toDp() }
     }
     Row(
         modifier = Modifier
@@ -456,32 +434,109 @@ private fun AmountInput(
             ),
         )
         Spacer(Modifier.width(8.dp))
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            textStyle = amountStyle,
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Decimal,
-                imeAction = ImeAction.Next,
-            ),
-            keyboardActions = KeyboardActions(onNext = { onNext() }),
-            singleLine = true,
+        Box(
             modifier = Modifier.width(fieldWidth),
-            decorationBox = { innerTextField ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty()) {
-                        Text(
-                            text = placeholder,
-                            style = placeholderStyle,
-                            // 与光标错开，空态时竖线显示在占位符左侧
-                            modifier = Modifier.padding(start = CURSOR_WIDTH),
-                        )
-                    }
-                    innerTextField()
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            if (value.isEmpty()) {
+                Text(text = placeholder, style = placeholderStyle)
+            } else {
+                Text(text = value, style = amountStyle)
+            }
+        }
+    }
+}
+
+/**
+ * 内置数字键盘：免去唤起系统输入法，直接完成金额输入与保存。
+ *
+ * 布局为 4 行 4 列，最后一行的「保存」占据半行宽度，与表单保存逻辑一致。
+ */
+@Composable
+private fun AmountKeypad(
+    isSaving: Boolean,
+    onDigit: (String) -> Unit,
+    onBackspace: () -> Unit,
+    onClear: () -> Unit,
+    onSave: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KeypadKey("7", onClick = { onDigit("7") }, modifier = Modifier.weight(1f))
+            KeypadKey("8", onClick = { onDigit("8") }, modifier = Modifier.weight(1f))
+            KeypadKey("9", onClick = { onDigit("9") }, modifier = Modifier.weight(1f))
+            KeypadKey(
+                "⌫",
+                onClick = onBackspace,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KeypadKey("4", onClick = { onDigit("4") }, modifier = Modifier.weight(1f))
+            KeypadKey("5", onClick = { onDigit("5") }, modifier = Modifier.weight(1f))
+            KeypadKey("6", onClick = { onDigit("6") }, modifier = Modifier.weight(1f))
+            KeypadKey(
+                "C",
+                onClick = onClear,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KeypadKey("1", onClick = { onDigit("1") }, modifier = Modifier.weight(1f))
+            KeypadKey("2", onClick = { onDigit("2") }, modifier = Modifier.weight(1f))
+            KeypadKey("3", onClick = { onDigit("3") }, modifier = Modifier.weight(1f))
+            KeypadKey(".", onClick = { onDigit(".") }, modifier = Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KeypadKey("0", onClick = { onDigit("0") }, modifier = Modifier.weight(2f))
+            KeypadKey(
+                label = stringResource(R.string.save_expense),
+                onClick = onSave,
+                enabled = !isSaving,
+                container = MaterialTheme.colorScheme.primary,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                labelStyle = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                modifier = Modifier.weight(2f),
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
                 }
-            },
-        )
+            }
+        }
+    }
+}
+
+/** 数字键盘的单个按键。 */
+@Composable
+private fun KeypadKey(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    container: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+    labelStyle: TextStyle = MaterialTheme.typography.titleLarge.copy(
+        fontWeight = FontWeight.SemiBold,
+    ),
+    content: @Composable () -> Unit = {},
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        modifier = modifier
+            .height(52.dp)
+            .clip(shape)
+            .background(container)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = label, style = labelStyle, color = tint, maxLines = 1)
+        content()
     }
 }
 
